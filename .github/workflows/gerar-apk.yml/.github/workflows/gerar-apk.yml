@@ -1,0 +1,103 @@
+name: Gerar APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Construir APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Instalar Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Instalar Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Ver arquivos
+        run: |
+          echo "Arquivos encontrados:"
+          find . -maxdepth 3 -type f | sort
+
+      - name: Procurar projeto Android
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p projeto
+
+          ZIP=$(find . -maxdepth 2 -type f \
+            \( -iname "*.zip" \) \
+            -not -path "./.git/*" \
+            | head -n 1)
+
+          if [ -n "$ZIP" ]; then
+            echo "ZIP encontrado:"
+            echo "$ZIP"
+
+            unzip -o "$ZIP" -d projeto
+          else
+            echo "Nenhum ZIP encontrado."
+          fi
+
+      - name: Procurar gradlew
+        shell: bash
+        run: |
+          set -e
+
+          echo "Procurando gradlew..."
+
+          GRADLEW=$(find . -type f -name "gradlew" \
+            -not -path "./.git/*" \
+            | head -n 1)
+
+          if [ -z "$GRADLEW" ]; then
+            echo "ERRO: gradlew não encontrado."
+
+            echo ""
+            echo "Arquivos encontrados:"
+            find . -maxdepth 6 -type f | sort
+
+            exit 1
+          fi
+
+          echo "gradlew encontrado:"
+          echo "$GRADLEW"
+
+          PROJECT_DIR=$(dirname "$GRADLEW")
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Preparar Gradle
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+          chmod +x gradlew
+          ./gradlew --version
+
+      - name: Gerar APK
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Procurar APK
+        run: |
+          echo "APKs encontrados:"
+          find . -type f -name "*.apk" -print
+
+      - name: Salvar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: APK-debug
+          path: |
+            **/build/outputs/apk/**/*.apk
+            **/build/outputs/apk/*.apk
+          if-no-files-found: error
