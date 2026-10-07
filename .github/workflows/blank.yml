@@ -15,98 +15,30 @@ jobs:
       - name: Instalar Java
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '17'
 
-      - name: Instalar Android SDK
-        uses: android-actions/setup-android@v4
-
-      - name: Encontrar arquivo do projeto
-        shell: bash
+      - name: Dar permissão ao Gradle
         run: |
-          set -e
-
-          echo "Arquivos na raiz:"
-          ls -lah
-
-          ARQUIVO=$(find . -maxdepth 2 -type f \
-            \( -name "*.zip" -o -name "*.ZIP" \) \
-            -not -path "./.git/*" \
-            | head -n 1)
-
-          if [ -z "$ARQUIVO" ]; then
-            echo "Nenhum arquivo ZIP encontrado."
-            exit 1
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+          elif [ -f "./android/gradlew" ]; then
+            chmod +x ./android/gradlew
           fi
-
-          echo "ZIP encontrado: $ARQUIVO"
-
-          mkdir -p projeto_extraido
-
-          unzip -o "$ARQUIVO" -d projeto_extraido
-
-      - name: Procurar Gradle Wrapper
-        shell: bash
-        run: |
-          set -e
-
-          echo "Procurando gradlew..."
-
-          GRADLEW=$(find . -type f -name "gradlew" \
-            -not -path "./.git/*" \
-            | head -n 1)
-
-          if [ -z "$GRADLEW" ]; then
-            echo "ERRO: gradlew não encontrado."
-            echo ""
-            echo "Estrutura encontrada:"
-            find projeto_extraido -maxdepth 4 -type f | head -200
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$GRADLEW")
-
-          echo "gradlew encontrado:"
-          echo "$GRADLEW"
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Preparar Gradle
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          chmod +x gradlew
-
-          ./gradlew --version
 
       - name: Compilar APK
-        shell: bash
         run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          ./gradlew assembleDebug \
-            --no-daemon \
-            --stacktrace
-
-      - name: Procurar APK
-        shell: bash
-        run: |
-          echo "APKs encontrados:"
-
-          find . -type f -name "*.apk" \
-            -not -path "*/.gradle/*" \
-            -print
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug
+          elif [ -f "./android/gradlew" ]; then
+            cd android && ./gradlew assembleDebug
+          else
+            echo "Ficheiro gradlew não encontrado no repositório."
+            exit 1
+          fi
 
       - name: Salvar APK
         uses: actions/upload-artifact@v4
         with:
-          name: APK-debug
-          path: |
-            **/build/outputs/apk/**/*.apk
-            **/build/outputs/apk/*.apk
-          if-no-files-found: error
+          name: app-debug
+          path: '**/build/outputs/apk/debug/*.apk'
