@@ -5,6 +5,7 @@ on:
 
 jobs:
   build:
+    name: Construir APK
     runs-on: ubuntu-latest
 
     steps:
@@ -17,31 +18,95 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Descompactar projeto
-        run: |
-          mkdir projeto
-          unzip -q "shapepro_android_project (1).zip" -d projeto
-          echo "Conteúdo:"
-          find projeto -maxdepth 3 -type f | head -100
+      - name: Instalar Android SDK
+        uses: android-actions/setup-android@v4
 
-      - name: Encontrar Gradle
+      - name: Encontrar arquivo do projeto
+        shell: bash
         run: |
-          GRADLEW=$(find projeto -name gradlew -type f | head -1)
-          if [ -z "$GRADLEW" ]; then
-            echo "gradlew não encontrado"
+          set -e
+
+          echo "Arquivos na raiz:"
+          ls -lah
+
+          ARQUIVO=$(find . -maxdepth 2 -type f \
+            \( -name "*.zip" -o -name "*.ZIP" \) \
+            -not -path "./.git/*" \
+            | head -n 1)
+
+          if [ -z "$ARQUIVO" ]; then
+            echo "Nenhum arquivo ZIP encontrado."
             exit 1
           fi
-          chmod +x "$GRADLEW"
-          echo "Gradle encontrado em: $GRADLEW"
-          echo "GRADLEW=$GRADLEW" >> "$GITHUB_ENV"
+
+          echo "ZIP encontrado: $ARQUIVO"
+
+          mkdir -p projeto_extraido
+
+          unzip -o "$ARQUIVO" -d projeto_extraido
+
+      - name: Procurar Gradle Wrapper
+        shell: bash
+        run: |
+          set -e
+
+          echo "Procurando gradlew..."
+
+          GRADLEW=$(find . -type f -name "gradlew" \
+            -not -path "./.git/*" \
+            | head -n 1)
+
+          if [ -z "$GRADLEW" ]; then
+            echo "ERRO: gradlew não encontrado."
+            echo ""
+            echo "Estrutura encontrada:"
+            find projeto_extraido -maxdepth 4 -type f | head -200
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$GRADLEW")
+
+          echo "gradlew encontrado:"
+          echo "$GRADLEW"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Preparar Gradle
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          chmod +x gradlew
+
+          ./gradlew --version
 
       - name: Compilar APK
+        shell: bash
         run: |
-          cd "$(dirname "$GRADLEW")"
-          ./gradlew assembleDebug
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --stacktrace
+
+      - name: Procurar APK
+        shell: bash
+        run: |
+          echo "APKs encontrados:"
+
+          find . -type f -name "*.apk" \
+            -not -path "*/.gradle/*" \
+            -print
 
       - name: Salvar APK
         uses: actions/upload-artifact@v4
         with:
-          name: APK
-          path: '**/build/outputs/apk/**/*.apk'
+          name: APK-debug
+          path: |
+            **/build/outputs/apk/**/*.apk
+            **/build/outputs/apk/*.apk
+          if-no-files-found: error
